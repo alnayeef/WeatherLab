@@ -5,17 +5,12 @@ from pathlib import Path
 
 import pandas as pd
 import platformdirs
-import pycountry
 import requests
+
+from .countries import resolve_country
 
 OSCAR_API = "https://oscar.wmo.int/surface/rest/api/search/station"
 CACHE_MAX_AGE = timedelta(days=30)
-
-
-def _resolve_iso3(country_name):
-    """Turn whatever a user types into the ISO3 code OSCAR expects."""
-    match = pycountry.countries.search_fuzzy(country_name)
-    return match[0].alpha_3
 
 
 def _wmo_from_wigos(wigos_id):
@@ -77,7 +72,7 @@ class StationDB:
     and cached locally so repeat runs don't hit the network."""
 
     def __init__(self, country_name, max_age=CACHE_MAX_AGE):
-        self.iso3 = _resolve_iso3(country_name)
+        self.iso3 = resolve_country(country_name).iso3
         path = _cache_path(self.iso3)
 
         age = None
