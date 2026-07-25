@@ -1,91 +1,66 @@
+"""Orchestrate fetching, decoding, and geolocating SYNOP observations
+for one country and one target synoptic hour."""
+
 import pandas as pd
-import numpy as np
-from metpy.calc import wind_components
 from metpy.units import units
+from metpy.calc import wind_components
+
 from .synop import get_raw_synop
 from .decoder import decode_synop
+from .stationdb import StationDB
 
-def latest_surface_obs(country="Bang", hours_ago=0):
-    """
-    Download latest SYNOP observations for a given region and decode them.
-    """
-    # 1. Download raw data text matrix
-    raw = get_raw_synop(country=country, hours_ago=hours_ago)
 
+def surface_obs(country_name, target_time):
+    """
+    Returns a DataFrame ready for interpolation and plotting - one row
+    per station, lat/lon and u/v wind already attached. Empty if
+    nothing could be decoded and matched to a known station.
+    """
+    raw = get_raw_synop(country_name, target_time)
     if raw.empty:
         return pd.DataFrame()
 
-    # 2. Decode each raw synop string row
-        # 2. Decode each raw synop string row
+    db = StationDB(country_name)
+
     rows = []
-    
-    # --- FIX STEP: Dynamically find the text column ---
-    # Look for common column names like 'synop_text', 'synop', or 'report'
-    possible_cols = ["synop_text", "synop", "report", "text"]
-    text_col = next((c for c in possible_cols if c in raw.columns), None)
-    
-    # Fallback: if none match, use the last column (usually where the text blob sits)
-    if text_col is None:
-        text_col = raw.columns[-1]
-
-        print(f"[+] Extracting raw feeds from column: '{text_col}'")
-
-    # --- FIX STEP: Map the exact column name discovered by diagnostics ---
-    wmo_col = "WMOIND"
-
-    for _, row in raw.iterrows():
-        try:
-            raw_text = row[text_col]
-            if pd.isna(raw_text) or not str(raw_text).strip():
-                continue
-                
-            decoded = decode_synop(raw_text)
-            if decoded:
-                decoded["wmo"] = row[wmo_col]
-                rows.append(decoded)
-        except Exception as e:
+    for row in raw.itertuples():
+        decoded = decode_synop(row.REPORT)
+        if decoded is None:
             continue
+        station = db.lookup_wmo(row.WMOIND)
+        if station is None:
+            continue
+        decoded.update(station)
+        decoded["wmo"] = str(row.WMOIND)
+        rows.append(decoded)
 
-    obs = pd.DataFrame(rows)
+    print(f"[pipeline] {len(rows)} of {len(raw)} station report(s) decoded and matched.")
 
-
-
-    if obs.empty:
-        print("Warning: All retrieved station reports for this hour were NIL or unparseable.")
+    if not rows:
         return pd.DataFrame()
 
-        # 3. Handle wind fields cleanly
-    obs["wind_speed"] = pd.to_numeric(obs["wind_speed"], errors="coerce").fillna(0.0)
-    obs["wind_dir"] = pd.to_numeric(obs["wind_dir"], errors="coerce").fillna(0.0)
-
-    # Force wind arrays to explicit floats to clear the Pint/radian mismatch completely
-    speeds = obs["wind_speed"].values * units("knots")
-    directions = obs["wind_dir"].values * units("degrees")
-
-    u, v = wind_components(speeds, directions)
-    obs["u"] = u.magnitude
-    obs["v"] = v.magnitude
-
-    print("[+] Appending universal coordinates via MetPy IO engine...")
-    from metpy.io import add_station_lat_lon
-    
-    # CRITICAL CHANGE: Standardize WMO identifiers as clean, unpadded integers 
-    # and name the column EXACTLY "wmo" so MetPy matches its master dictionary keys.
-    obs["wmo"] = pd.to_numeric(obs["station"] if "station" in obs.columns else obs["wmo"], errors="coerce").astype(int)
-
-    # Force MetPy to cross-reference our table based on the explicit 'wmo' ID index
-    obs = add_station_lat_lon(obs, stn_var="wmo")
-
-    # Adapt output names for the rendering scripts
-    obs = obs.rename(columns={
-        "latitude": "lat",
-        "longitude": "lon"
-    })
-
-    # Drop any records that failed to map
-    obs = obs.dropna(subset=["lon", "lat"])
-
-    return obs
+    return _add_wind_components(pd.DataFrame(rows))
 
 
-
+def _add_wind_components(df):
+    """Tested separately against known-correct values for both knots
+    and m/s. Calm gives (0, 0); anything unknown gives (None, None)."""
+    u_list, v_list = [], []
+    for row in df.itertuples():
+        speed, direction, unit = row.wind_speed, row.wind_dir, row.wind_speed_unit
+        if speed == 0:
+            u_list.append(0.0)
+            v_list.append(0.0)
+        elif pd.isna(speed) or pd.isna(direction) or pd.isna(unit):
+            u_list.append(None)
+            v_list.append(None)
+        else:
+            speed_q = speed * units(unit)
+            direction_q = direction * units("degrees")
+            u, v = wind_components(speed_q, direction_q)
+            u_list.append(u.to("m/s").magnitude)
+            v_list.append(v.to("m/s").magnitude)
+    df = df.copy()
+    df["u"] = u_list
+    df["v"] = v_list
+    return df
