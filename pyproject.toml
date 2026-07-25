@@ -7,7 +7,7 @@ name = "weatherlab"
 version = "0.1.0"
 description = "A GrADS-style CLI for decoding SYNOP reports and drawing surface weather charts"
 requires-python = ">=3.11"
-dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow"]
+dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow", "pymetdecoder"]
 
 [tool.setuptools]
 packages = ["weatherlab"]
