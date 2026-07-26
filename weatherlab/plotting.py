@@ -37,6 +37,10 @@ def plot_isobars(ax, LON, LAT, SLP):
 
 
 def plot_station_model(ax, obs):
+    """Plot temp/dewpoint/SLP text and wind barbs for each station.
+    Missing wind (NaN u/v) is left undrawn rather than shown as a
+    fake calm - matches the calm-vs-missing distinction already made
+    throughout the decode pipeline."""
     valid_obs = obs.dropna(subset=["lon", "lat"]).copy()
     if valid_obs.empty:
         return
@@ -44,6 +48,7 @@ def plot_station_model(ax, obs):
 
     temps = valid_obs["temp"].apply(lambda x: f"{round(x)}" if pd.notna(x) else "")
     dews = valid_obs["dewpoint"].apply(lambda x: f"{round(x)}" if pd.notna(x) else "")
+    # Standard 3-digit SLP encoding (e.g., 1013.2 -> 132)
     slp = valid_obs["slp"].apply(
         lambda x: str(int(round(x * 10)) % 1000).zfill(3) if pd.notna(x) else ""
     )
@@ -55,6 +60,4 @@ def plot_station_model(ax, obs):
     sp.plot_text("SW", dews.values)
     sp.plot_text("NE", slp.values)
 
-    u = valid_obs["u"].fillna(0).values
-    v = valid_obs["v"].fillna(0).values
-    sp.plot_barb(u, v)
+    sp.plot_barb(valid_obs["u"].values, valid_obs["v"].values)
