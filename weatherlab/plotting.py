@@ -27,10 +27,19 @@ def create_map(obs, padding=0.5):
     return fig, ax
 
 
-def plot_isobars(ax, LON, LAT, SLP):
-    levels = np.arange(np.floor(np.nanmin(SLP)), np.ceil(np.nanmax(SLP)), 2)
+def plot_isobars(ax, LON, LAT, SLP, interval=4):
+    """Isobars at fixed, conventional 4 hPa intervals by default -
+    snapped to fixed multiples of `interval`, not derived from
+    today's min/max. A real hand-analysis chart draws the same
+    physical pressure at the same line every time; deriving the
+    interval from whatever data happens to come in would draw a
+    different set of lines every run, even for near-identical
+    weather."""
+    low = np.floor(np.nanmin(SLP) / interval) * interval
+    high = np.ceil(np.nanmax(SLP) / interval) * interval
+    levels = np.arange(low, high + interval, interval)
     if len(levels) == 0:
-        levels = [1010]
+        levels = [1012]  # nearest standard multiple of 4 to average sea-level pressure
     cs = ax.contour(
         LON, LAT, SLP, levels=levels, colors="black", linewidths=1.2,
         transform=ccrs.PlateCarree(), antialiased=True,
