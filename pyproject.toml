@@ -5,7 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "weatherlab"
 version = "0.1.0"
-description = "A GrADS-style CLI for decoding SYNOP reports and drawing surface weather charts"
+license = "MIT"
+authors = [{name = "Naif"}]
+description = "A CLI for decoding SYNOP reports and drawing surface weather charts"
 requires-python = ">=3.11"
 dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow", "pymetdecoder", "metpy", "matplotlib<3.11", "cartopy", "typer"]
 
