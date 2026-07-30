@@ -1,5 +1,8 @@
 """Command-line interface for WeatherLab."""
 
+import matplotlib
+matplotlib.use("TkAgg")  # must be set before any import below touches pyplot
+
 from datetime import datetime, UTC
 
 import typer
@@ -7,8 +10,15 @@ import typer
 from .pipeline import surface_obs
 from .interpolate import pressure_field
 from .plotting import create_map, plot_isobars, plot_station_model
+from . import shell as shell_module
 
 app = typer.Typer()
+
+
+@app.callback(invoke_without_command=True)
+def default(ctx: typer.Context):
+    if ctx.invoked_subcommand is None:
+        shell_module.run()
 
 
 @app.command()
@@ -37,14 +47,6 @@ def surface(
     output = f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"
     fig.savefig(output, dpi=300)
     typer.echo(f"Saved {output}")
-
-
-@app.command()
-def configure():
-    """Set a persistent default region. Not built yet."""
-    # Placeholder, existing now purely so `surface` requires its own
-    # command name from day one - see the commit message for why.
-    typer.echo("Not implemented yet.")
 
 
 def main():
