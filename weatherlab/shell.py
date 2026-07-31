@@ -3,8 +3,12 @@ terse abbreviations - "set country Bangladesh", not "d slp" - so
 nothing needs to be memorized up front."""
 
 import matplotlib
-matplotlib.use("TkAgg")  # kept here too, so this module stays correct
-import matplotlib.pyplot as plt              # even if imported on its own, not through cli.py
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+try:
+    import readline  # enables up/down history and line-editing for input()
+except ImportError:
+    pass  # not available on Windows without pyreadline3 - shell still works, just without history
 
 from datetime import datetime, UTC
 from importlib.metadata import version
@@ -32,50 +36,56 @@ class ShellState:
         self.country = None
         self.time = None
         self.fig = None
+        self.ax = None
+
+
+def _blank_window(state):
+    """A window with nothing plotted yet - GrADS itself opens one
+    immediately on startup, before any data command has been given."""
+    fig, ax = create_map(obs=None)
+    fig.canvas.manager.set_window_title(f"WeatherLab {VERSION}")
+    plt.show(block=False)
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    state.fig = fig
+    state.ax = ax
 
 
 def _draw(state):
+    """Redraws onto the SAME axes/window each time (create_map with
+    ax= clears and reconfigures it) rather than opening a new one -
+    confirmed directly that this works correctly on a cartopy axes,
+    including going from the blank startup state to a real map."""
     target = datetime.strptime(state.time, "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
     obs = surface_obs(state.country, target)
     if obs.empty:
         print("No stations decoded for this country/time - nothing to plot.")
         return
 
-    if state.fig is not None:
-        plt.close(state.fig)
-
-    fig, ax = create_map(obs)
+    create_map(obs, ax=state.ax)
     LON, LAT, SLP = pressure_field(obs)
-    plot_isobars(ax, LON, LAT, SLP)
-    plot_station_model(ax, obs)
-    fig.canvas.manager.set_window_title(f"WeatherLab {VERSION} - {state.country} {state.time}")
-    plt.show(block=False)
-    fig.canvas.draw()
-    fig.canvas.flush_events()
-    state.fig = fig
+    plot_isobars(state.ax, LON, LAT, SLP)
+    plot_station_model(state.ax, obs)
+    state.fig.canvas.manager.set_window_title(f"WeatherLab {VERSION} - {state.country} {state.time}")
+    state.fig.canvas.draw()
+    state.fig.canvas.flush_events()
 
 
 def handle_command(state, line):
-    """Parse and act on one line of input. Returns False if the shell
-    should exit, True otherwise."""
     parts = line.strip().split(maxsplit=2)
     if not parts:
         return True
-
     verb = parts[0].lower()
 
     if verb in ("exit", "quit"):
         return False
-
     if verb == "help":
         print(HELP_TEXT)
         return True
-
     if verb == "show":
         print(f"country: {state.country or '(not set)'}")
         print(f"time: {state.time or '(not set)'}")
         return True
-
     if verb == "set" and len(parts) == 3 and parts[1].lower() == "country":
         name = parts[2]
         try:
@@ -86,7 +96,6 @@ def handle_command(state, line):
         state.country = name
         print(f"country set to {name}")
         return True
-
     if verb == "set" and len(parts) == 3 and parts[1].lower() == "time":
         value = parts[2]
         try:
@@ -97,7 +106,6 @@ def handle_command(state, line):
         state.time = value
         print(f"time set to {value}")
         return True
-
     if verb == "plot":
         missing = [n for n, v in [("country", state.country), ("time", state.time)] if v is None]
         if missing:
@@ -115,6 +123,7 @@ def run():
     print("Created and maintained by Naif.")
     print("Type 'help' for commands, 'exit' to quit.")
     state = ShellState()
+    _blank_window(state)
     while True:
         try:
             line = input("weatherlab> ")
