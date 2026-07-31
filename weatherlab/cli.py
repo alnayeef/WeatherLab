@@ -2,6 +2,7 @@
 
 import matplotlib
 matplotlib.use("TkAgg")  # must be set before any import below touches pyplot
+import matplotlib.pyplot as plt
 
 from datetime import datetime, UTC
 
@@ -30,6 +31,10 @@ def surface(
         help="Minimum degrees between plotted stations, to reduce overlap in "
              "dense clusters. Set to 0 to draw every station regardless of crowding.",
     ),
+    save: bool = typer.Option(
+        False, "--save",
+        help="Also save the chart as a PNG, in addition to showing it.",
+    ),
 ):
     """Draw a surface weather chart for one country and one synoptic hour."""
     target = datetime.strptime(time, "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
@@ -43,10 +48,14 @@ def surface(
     LON, LAT, SLP = pressure_field(obs)
     plot_isobars(ax, LON, LAT, SLP)
     plot_station_model(ax, obs, min_radius=min_radius if min_radius > 0 else None)
+    fig.canvas.manager.set_window_title(f"WeatherLab {shell_module.VERSION} - {country} {time}")
 
-    output = f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"
-    fig.savefig(output, dpi=300)
-    typer.echo(f"Saved {output}")
+    if save:
+        output = f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"
+        fig.savefig(output, dpi=300)
+        typer.echo(f"Saved {output}")
+
+    plt.show()
 
 
 def main():
