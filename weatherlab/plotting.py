@@ -91,3 +91,9 @@ def plot_station_model(ax, obs, fontsize=4, symbol_fontsize=9, barb_length=5.75,
     sp.plot_symbol("C", cloud_vals, sky_cover, fontsize=symbol_fontsize)
     sp.plot_symbol("W", wx_vals, current_weather)
     sp.plot_barb(valid_obs["u"].values, valid_obs["v"].values, length=barb_length)
+    
+    
+def default_filename(country, time):
+    """Standard filename for a saved chart: <country>_<time>.png, with
+    spaces and colons replaced so it's safe as a filename on any OS."""
+    return f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"    

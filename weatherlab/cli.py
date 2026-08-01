@@ -10,7 +10,7 @@ import typer
 
 from .pipeline import surface_obs
 from .interpolate import pressure_field
-from .plotting import create_map, plot_isobars, plot_station_model
+from .plotting import create_map, plot_isobars, plot_station_model, default_filename
 from . import shell as shell_module
 
 app = typer.Typer()
@@ -51,7 +51,7 @@ def surface(
     fig.canvas.manager.set_window_title(f"WeatherLab {shell_module.VERSION} - {country} {time}")
 
     if save:
-        output = f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"
+        output = default_filename(country, time)
         fig.savefig(output, dpi=300)
         typer.echo(f"Saved {output}")
 
