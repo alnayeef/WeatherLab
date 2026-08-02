@@ -14,5 +14,8 @@ dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow", "p
 [project.scripts]
 weatherlab = "weatherlab.cli:main"
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.setuptools]
 packages = ["weatherlab"]

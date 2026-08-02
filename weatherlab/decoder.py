@@ -23,7 +23,15 @@ def _finalize(result):
 
 
 def decode_synop(report):
-    report_clean = str(report).strip()
+    # Strip the '=' end-of-report marker before decoding - real
+    # reports have it glued onto the last group with no space
+    # (e.g. "51003="), which pymetdecoder correctly rejects as not
+    # matching the expected 5-character group pattern, even though
+    # the group itself (without the marker) is entirely valid.
+    # manual_fallback_parse has always stripped this; this path
+    # never did, confirmed by a real, syntactically valid 5appp
+    # pressure-tendency group being wrongly flagged as invalid.
+    report_clean = str(report).replace('=', '').strip()
     if "AAXX" in report_clean:
         report_clean = report_clean[report_clean.index("AAXX"):]
 
@@ -73,7 +81,7 @@ def manual_fallback_parse(text):
     if wind_speed == 0:
         wind_dir = None
     if wind_speed is None:
-        wind_unit = None  # no speed recovered - a unit with nothing to attach to isn't meaningful
+        wind_unit = None
 
     temp, dewpoint, slp = None, None, None
     for t in body[2:]:
