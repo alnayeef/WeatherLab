@@ -3,16 +3,7 @@ manual fallback for reports pymetdecoder can't parse."""
 
 from pymetdecoder import synop
 
-# pymetdecoder reports wind units using WMO-style abbreviations that
-# Pint's registry doesn't recognize directly - confirmed on live data,
-# where 'KT' raised UndefinedUnitError. Normalized here so any caller
-# can always do units(wind_speed_unit) without knowing this quirk.
 _WIND_UNIT_MAP = {"KT": "knots"}
-
-# WMO code table 1855 (the iw digit in the YYGGiw group): what unit
-# the wind speed group is actually reported in. 0/1 is m/s, 3/4 is
-# knots, '/' (confirmed live, on a US report) means the station
-# didn't specify - confirmed against the official WMO manual.
 _WIND_UNIT_BY_IW = {"0": "m/s", "1": "m/s", "3": "knots", "4": "knots"}
 
 
@@ -23,11 +14,6 @@ def _normalize_wind_unit(unit):
 
 
 def _finalize(result):
-    """Enforce one invariant regardless of which path produced this
-    dict: a wind speed with no known unit isn't safely usable, so
-    it's dropped rather than passed along unlabeled. pymetdecoder's
-    own primary decode can leave a speed value with no unit attached
-    - this is the actual gap the previous, fallback-only fix missed."""
     if result is None:
         return None
     if result.get("wind_speed") is not None and result.get("wind_speed_unit") is None:
@@ -62,11 +48,9 @@ def decode_synop(report):
 def manual_fallback_parse(text):
     """
     Best-effort parse for reports pymetdecoder can't handle. Recovers
-    temp, dewpoint, SLP, and wind - the unit-consistency rule for wind
-    is enforced centrally by _finalize, not here, so both decode
-    paths share exactly one copy of that logic. cloud_cover,
-    visibility, and present_weather always come back None here, since
-    reliably hand-parsing their group positions is much closer to
+    temp, dewpoint, SLP, and wind. cloud_cover, visibility, and
+    present_weather always come back None here, since reliably
+    hand-parsing their group positions is much closer to
     reimplementing pymetdecoder than a fallback should attempt.
     """
     tokens = text.replace('=', '').split()
@@ -76,13 +60,23 @@ def manual_fallback_parse(text):
     iw = tokens[1][-1]
     wind_unit = _WIND_UNIT_BY_IW.get(iw)
 
-    # Skip AAXX, YYGGiw, IIiii - never data groups, and the station ID
-    # itself can start with any digit (Bangladesh's own IDs start with
-    # '4', which previously got misread as a pressure group).
     body = tokens[3:]
 
+    wind_dir, wind_speed = None, None
+    nddff = body[1] if len(body) > 1 else None
+    if nddff and len(nddff) == 5 and nddff.isdigit():
+        try:
+            wind_dir = int(nddff[1:3]) * 10
+            wind_speed = int(nddff[3:])
+        except ValueError:
+            pass
+    if wind_speed == 0:
+        wind_dir = None
+    if wind_speed is None:
+        wind_unit = None  # no speed recovered - a unit with nothing to attach to isn't meaningful
+
     temp, dewpoint, slp = None, None, None
-    for t in body:
+    for t in body[2:]:
         clean = t.replace('/', '')
         if not clean.isdigit() or len(clean) != 5:
             continue
@@ -95,17 +89,6 @@ def manual_fallback_parse(text):
         elif clean.startswith('4'):
             val = int(clean[1:]) / 10.0
             slp = val + 1000.0 if val < 500.0 else val
-
-    wind_dir, wind_speed = None, None
-    for t in body[:2]:
-        if len(t) == 5 and t.isdigit():
-            try:
-                wind_dir = int(t[1:3]) * 10
-                wind_speed = int(t[3:])
-            except ValueError:
-                pass
-    if wind_speed == 0:
-        wind_dir = None
 
     if temp is None and slp is None:
         return None
