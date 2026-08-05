@@ -9,7 +9,7 @@ license = "MIT"
 authors = [{name = "Naif"}]
 description = "A CLI for decoding SYNOP reports and drawing surface weather charts"
 requires-python = ">=3.11"
-dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow", "pymetdecoder", "metpy", "matplotlib<3.11", "cartopy", "typer"]
+dependencies = ["requests", "pycountry", "platformdirs", "pandas", "pyarrow", "pymetdecoder", "metpy", "matplotlib<3.11", "cartopy", "typer", "shapely"]
 
 [project.scripts]
 weatherlab = "weatherlab.cli:main"
