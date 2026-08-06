@@ -1,6 +1,7 @@
-"""Tests for weatherlab.regions.countries_in_bbox."""
+"""Tests for weatherlab.regions."""
 
-from weatherlab.regions import countries_in_bbox
+from weatherlab.countries import resolve_country
+from weatherlab.regions import countries_in_bbox, resolve_bbox_countries
 
 
 def test_small_box_inside_one_country():
@@ -30,3 +31,30 @@ def test_missing_iso_a3_falls_back_to_adm0_a3():
     codes = countries_in_bbox(5, 58, 12, 62)  # southern Norway
     assert "NOR" in codes
     assert "-99" not in codes
+
+
+def test_resolve_bbox_countries_returns_usable_names():
+    names, skipped = resolve_bbox_countries(89, 23, 91, 25)
+    assert names == ["Bangladesh"]
+    assert skipped == []
+
+
+def test_resolve_bbox_countries_names_round_trip_through_resolve_country():
+    """The whole point of returning names rather than codes directly
+    - confirms a name produced here resolves back to the exact same
+    ISO3 code via resolve_country(), the same function surface_obs
+    and StationDB already use for a single --country value."""
+    names, _ = resolve_bbox_countries(88, 22, 90, 26)
+    for name in names:
+        country = resolve_country(name)
+        assert country.iso3 in {"IND", "BGD"}
+
+
+def test_resolve_bbox_countries_skips_unresolvable_disputed_territory():
+    """Regression test: confirmed live that Kosovo's Natural Earth
+    code (KOS) has no pycountry entry at all, so there's no reliable
+    way to fetch OSCAR/Ogimet data for it under this project's
+    country-name architecture - it must be reported as skipped, not
+    silently dropped or allowed to crash the whole lookup."""
+    names, skipped = resolve_bbox_countries(20.0, 41.8, 21.8, 43.3)  # Kosovo
+    assert "KOS" in skipped
