@@ -1,5 +1,6 @@
 """Orchestrate fetching, decoding, and geolocating SYNOP observations
-for one country and one target synoptic hour."""
+for one country (or a lat/lon box spanning several) and one target
+synoptic hour."""
 
 import pandas as pd
 from metpy.units import units
@@ -8,6 +9,7 @@ from metpy.calc import wind_components
 from .synop import get_raw_synop
 from .decoder import decode_synop
 from .stationdb import StationDB
+from .regions import resolve_bbox_countries
 
 
 def surface_obs(country_name, target_time):
@@ -34,12 +36,50 @@ def surface_obs(country_name, target_time):
         decoded["wmo"] = str(row.WMOIND)
         rows.append(decoded)
 
-    print(f"[pipeline] {len(rows)} of {len(raw)} station report(s) decoded and matched.")
+    print(f"[pipeline] {country_name}: {len(rows)} of {len(raw)} station report(s) decoded and matched.")
 
     if not rows:
         return pd.DataFrame()
 
     return _add_wind_components(pd.DataFrame(rows))
+
+
+def surface_obs_bbox(min_lon, min_lat, max_lon, max_lat, target_time):
+    """
+    Fetch and decode observations for every country the box touches,
+    then filter down to just the stations whose actual coordinates
+    land inside the box - a station just across a border shouldn't
+    appear on the final chart just because its whole country got
+    fetched.
+
+    Returns (obs, skipped): obs is shaped exactly like surface_obs()'s
+    return value; skipped is the ISO3 codes of any disputed
+    territories the box touches that couldn't be resolved to a
+    fetchable country name (see resolve_bbox_countries) - reported
+    back explicitly rather than silently dropped or raised as an
+    error.
+    """
+    country_names, skipped = resolve_bbox_countries(min_lon, min_lat, max_lon, max_lat)
+    if not country_names:
+        return pd.DataFrame(), skipped
+
+    frames = [surface_obs(name, target_time) for name in country_names]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame(), skipped
+
+    combined = pd.concat(frames, ignore_index=True)
+    return _filter_to_bbox(combined, min_lon, min_lat, max_lon, max_lat), skipped
+
+
+def _filter_to_bbox(df, min_lon, min_lat, max_lon, max_lat):
+    """Keep only rows whose lon/lat actually falls inside the box -
+    needed because a country-wide fetch includes every station in
+    that country, not just the ones inside the requested box."""
+    return df[
+        (df["lon"] >= min_lon) & (df["lon"] <= max_lon) &
+        (df["lat"] >= min_lat) & (df["lat"] <= max_lat)
+    ].reset_index(drop=True)
 
 
 def _add_wind_components(df):
