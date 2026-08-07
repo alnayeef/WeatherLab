@@ -9,15 +9,26 @@ from metpy.calc import reduce_point_density
 from metpy.plots import StationPlot, sky_cover, current_weather
 
 
-def create_map(obs=None, padding=0.5, ax=None):
-    """Create (or reconfigure) a map axes sized to fit the given
-    stations. Pass ax to reuse an existing cartopy axes instead of
-    creating a new figure - clears it first. This is what lets the
-    interactive shell redraw onto the same window across repeated
-    `plot` commands instead of opening a new one each time; the
-    one-shot CLI path is unaffected and keeps calling this with
-    ax=None exactly as before. Pass obs=None for a blank view with
-    nothing plotted - used for the shell's startup window."""
+def create_map(obs=None, padding=0.5, ax=None, extent=None):
+    """Create (or reconfigure) a map axes. Three ways to control what
+    it shows, in priority order:
+    - extent=(lon_min, lon_max, lat_min, lat_max): show exactly this
+      area regardless of where any actual data sits - what a lat/lon
+      box query needs, so the map reflects the exact area requested,
+      not a crop of it based on wherever stations happened to be
+      found.
+    - obs given, no extent: derive it from the station spread, with
+      padding - the country-selection case, where there's no
+      user-specified exact box to show instead.
+    - neither: blank view, nothing plotted yet.
+
+    Pass ax to reuse an existing cartopy axes instead of creating a
+    new figure - clears it first. This is what lets the interactive
+    shell redraw onto the same window across repeated `plot` commands
+    rather than opening a new one each time; the one-shot CLI path
+    doesn't need this and can keep calling this with ax=None exactly
+    as before.
+    """
     if ax is None:
         fig = plt.figure(figsize=(12, 9))
         ax = plt.axes(projection=ccrs.PlateCarree())
@@ -25,13 +36,15 @@ def create_map(obs=None, padding=0.5, ax=None):
         fig = ax.figure
         ax.clear()
 
-    if obs is not None and not obs.empty:
+    if extent is None and obs is not None and not obs.empty:
+        extent = (
+            obs["lon"].min() - padding, obs["lon"].max() + padding,
+            obs["lat"].min() - padding, obs["lat"].max() + padding,
+        )
+
+    if extent is not None:
         ax.set_axis_on()
-        lon_min = obs["lon"].min() - padding
-        lon_max = obs["lon"].max() + padding
-        lat_min = obs["lat"].min() - padding
-        lat_max = obs["lat"].max() + padding
-        ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
+        ax.set_extent(extent, crs=ccrs.PlateCarree())
         ax.add_feature(cfeature.COASTLINE, linewidth=0.8)
         ax.add_feature(cfeature.BORDERS, linewidth=0.6)
         ax.add_feature(cfeature.STATES, linewidth=0.4)
@@ -59,6 +72,12 @@ def _format_visibility(x):
         return ""
     km = x / 1000
     return f"{km:.1f}" if x < 5000 else f"{km:.0f}"
+
+
+def default_filename(country, time):
+    """Standard filename for a saved chart: <country>_<time>.png, with
+    spaces and colons replaced so it's safe as a filename on any OS."""
+    return f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"
 
 
 def plot_station_model(ax, obs, fontsize=4, symbol_fontsize=9, barb_length=5.75,
@@ -91,9 +110,3 @@ def plot_station_model(ax, obs, fontsize=4, symbol_fontsize=9, barb_length=5.75,
     sp.plot_symbol("C", cloud_vals, sky_cover, fontsize=symbol_fontsize)
     sp.plot_symbol("W", wx_vals, current_weather)
     sp.plot_barb(valid_obs["u"].values, valid_obs["v"].values, length=barb_length)
-    
-    
-def default_filename(country, time):
-    """Standard filename for a saved chart: <country>_<time>.png, with
-    spaces and colons replaced so it's safe as a filename on any OS."""
-    return f"{country.replace(' ', '_')}_{time.replace(' ', '_').replace(':', '')}.png"    
