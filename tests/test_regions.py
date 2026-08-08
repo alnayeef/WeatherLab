@@ -1,7 +1,8 @@
 """Tests for weatherlab.regions."""
 
 from weatherlab.countries import resolve_country
-from weatherlab.regions import countries_in_bbox, resolve_bbox_countries
+import pytest
+from weatherlab.regions import countries_in_bbox, parse_bbox, resolve_bbox_countries
 
 
 def test_small_box_inside_one_country():
@@ -58,3 +59,41 @@ def test_resolve_bbox_countries_skips_unresolvable_disputed_territory():
     silently dropped or allowed to crash the whole lookup."""
     names, skipped = resolve_bbox_countries(20.0, 41.8, 21.8, 43.3)  # Kosovo
     assert "KOS" in skipped
+
+
+def test_parse_bbox_valid_input():
+    assert parse_bbox("88,22,90,26") == (88.0, 22.0, 90.0, 26.0)
+
+
+def test_parse_bbox_handles_whitespace():
+    assert parse_bbox("88, 22, 90, 26") == (88.0, 22.0, 90.0, 26.0)
+
+
+def test_parse_bbox_wrong_count_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("88,22,90")
+
+
+def test_parse_bbox_non_numeric_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("abc,22,90,26")
+
+
+def test_parse_bbox_min_lon_not_less_than_max_lon_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("90,22,88,26")
+
+
+def test_parse_bbox_min_lat_not_less_than_max_lat_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("88,26,90,22")
+
+
+def test_parse_bbox_longitude_out_of_range_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("-200,22,90,26")
+
+
+def test_parse_bbox_latitude_out_of_range_raises():
+    with pytest.raises(ValueError):
+        parse_bbox("88,-100,90,26")

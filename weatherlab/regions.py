@@ -1,13 +1,44 @@
-"""Resolve a lat/lon bounding box to the ISO3 country codes it
-overlaps, using Natural Earth's country boundaries (already cached
-locally by cartopy) and a real geometric intersection - a simple
-min/max bounding-box comparison would incorrectly match countries
-split across the antimeridian, like Fiji, whose naive bounds span
-the entire globe's longitude range."""
+"""Resolve a lat/lon bounding box: parse it from user input, find
+which countries it overlaps, and convert those to country names
+usable by the rest of the pipeline."""
 
 import cartopy.io.shapereader as shpreader
 import pycountry
 from shapely.geometry import box
+
+
+def parse_bbox(text):
+    """
+    Parse a "min_lon,min_lat,max_lon,max_lat" string into a validated
+    (min_lon, min_lat, max_lon, max_lat) tuple of floats. Raises
+    ValueError with a specific, actionable message for anything
+    malformed, so bad input is rejected immediately - not partway
+    through a live fetch.
+
+    Boxes crossing the antimeridian (e.g. spanning from 170 to -170
+    longitude) aren't supported - min_lon must be less than max_lon,
+    same as latitude.
+    """
+    parts = text.split(",")
+    if len(parts) != 4:
+        raise ValueError(
+            f"Expected 4 comma-separated values (min_lon,min_lat,max_lon,max_lat), got {len(parts)}."
+        )
+    try:
+        min_lon, min_lat, max_lon, max_lat = (float(p.strip()) for p in parts)
+    except ValueError:
+        raise ValueError(f"All 4 values must be numbers: {text!r}")
+
+    if not (-180 <= min_lon <= 180) or not (-180 <= max_lon <= 180):
+        raise ValueError("Longitude values must be between -180 and 180.")
+    if not (-90 <= min_lat <= 90) or not (-90 <= max_lat <= 90):
+        raise ValueError("Latitude values must be between -90 and 90.")
+    if min_lon >= max_lon:
+        raise ValueError(f"min_lon ({min_lon}) must be less than max_lon ({max_lon}).")
+    if min_lat >= max_lat:
+        raise ValueError(f"min_lat ({min_lat}) must be less than max_lat ({max_lat}).")
+
+    return (min_lon, min_lat, max_lon, max_lat)
 
 
 def _load_country_records():
